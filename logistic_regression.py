@@ -17,7 +17,8 @@ class MyLogReg:
         )
 
     def fit(self, X: pd.DataFrame, y: pd.Series, verbose: int = False):
-        X.insert(loc=0, column="ones", value=1)
+        if "ones" not in X.columns:
+            X.insert(loc=0, column="ones", value=1)
         num_features = X.shape[1]
 
         if self.weights is None:
@@ -50,3 +51,12 @@ class MyLogReg:
 
     def _sigmoid(self, z):
         return np.where(z >= 0, 1 / (1 + np.exp(-z)), np.exp(z) / (1 + np.exp(z)))
+
+    def predict_proba(self, X: pd.DataFrame):
+        if "ones" not in X.columns:
+            X.insert(loc=0, column="ones", value=1)
+        return self._sigmoid(X @ self.weights)
+
+    def predict(self, X: pd.DataFrame):
+        proba = self.predict_proba(X)
+        return (proba > 0.5).astype(int)
