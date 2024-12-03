@@ -52,13 +52,17 @@ class MyLogReg:
             print(f"start | loss: {log_loss:.2f}")
 
         for i in range(self.n_iter):
+            if callable(self.learning_rate):
+                curr_learning_rate = self.learning_rate(i + 1)
+            else:
+                curr_learning_rate = self.learning_rate
 
             y_pred = self._sigmoid(X @ self.weights)
             log_loss = self._calculate_logloss(y, y_pred)
 
             gradient = X.T @ (y_pred - y) / len(y)
             gradient += self._calculate_regularization_gradient()
-            self.weights -= self.learning_rate * gradient
+            self.weights -= curr_learning_rate * gradient
             y_pred = self._sigmoid(X @ self.weights)
             metric_val = self._calculate_metric(y, y_pred)
             if verbose and (i + 1) % verbose == 0:
