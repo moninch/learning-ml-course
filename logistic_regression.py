@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.metrics import roc_auc_score
+import random
 
 eps = 1e-15
 
@@ -17,6 +18,8 @@ class MyLogReg:
         reg=None,
         l1_coef=0,
         l2_coef=0,
+        sgd_sample=None,
+        random_state=42,
     ):
         self.n_iter = n_iter
         self.learning_rate = learning_rate
@@ -27,6 +30,8 @@ class MyLogReg:
         self.reg = reg
         self.l1_coef = l1_coef
         self.l2_coef = l2_coef
+        self.sgd_sample = sgd_sample
+        self.random_state = random_state
 
     def __str__(self):
         return (
@@ -44,6 +49,8 @@ class MyLogReg:
         X = X.values
         y = y.values
 
+        random.seed(self.random_state)
+
         y_pred = self._sigmoid(X @ self.weights)
         log_loss = self._calculate_logloss(y, y_pred)
         metric_val = self._calculate_metric(y, y_pred)
@@ -57,14 +64,27 @@ class MyLogReg:
             else:
                 curr_learning_rate = self.learning_rate
 
-            y_pred = self._sigmoid(X @ self.weights)
-            log_loss = self._calculate_logloss(y, y_pred)
+            if self.sgd_sample:
+                if isinstance(self.sgd_sample, float):
+                    sample_size = int(self.sgd_sample * X.shape[0])
+                elif isinstance(self.sgd_sample, int):
+                    sample_size = self.sgd_sample
 
-            gradient = X.T @ (y_pred - y) / len(y)
+                sample_rows_idx = random.sample(range(X.shape[0]), sample_size)
+                X_batch = X[sample_rows_idx]
+                y_batch = y[sample_rows_idx]
+            else:
+                X_batch = X
+                y_batch = y
+
+            y_pred = self._sigmoid(X_batch @ self.weights)
+            log_loss = self._calculate_logloss(y_batch, y_pred)
+
+            gradient = X_batch.T @ (y_pred - y_batch) / len(y_batch)
             gradient += self._calculate_regularization_gradient()
             self.weights -= curr_learning_rate * gradient
-            y_pred = self._sigmoid(X @ self.weights)
-            metric_val = self._calculate_metric(y, y_pred)
+            y_pred = self._sigmoid(X_batch @ self.weights)
+            metric_val = self._calculate_metric(y_batch, y_pred)
             if verbose and (i + 1) % verbose == 0:
                 print(
                     f"{i + 1} | loss: {log_loss:.2f} | {self.metric}: {metric_val:.2f}"
