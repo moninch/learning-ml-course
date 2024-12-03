@@ -8,7 +8,15 @@ eps = 1e-15
 class MyLogReg:
 
     def __init__(
-        self, n_iter=10, learning_rate=0.1, weights=None, metric=None, verbose=None
+        self,
+        n_iter=10,
+        learning_rate=0.1,
+        weights=None,
+        metric=None,
+        verbose=None,
+        reg=None,
+        l1_coef=0,
+        l2_coef=0,
     ):
         self.n_iter = n_iter
         self.learning_rate = learning_rate
@@ -16,6 +24,9 @@ class MyLogReg:
         self.metric = metric
         self.best_score = None
         self.verbose = verbose
+        self.reg = reg
+        self.l1_coef = l1_coef
+        self.l2_coef = l2_coef
 
     def __str__(self):
         return (
@@ -46,6 +57,7 @@ class MyLogReg:
             log_loss = self._calculate_logloss(y, y_pred)
 
             gradient = X.T @ (y_pred - y) / len(y)
+            gradient += self._calculate_regularization_gradient()
             self.weights -= self.learning_rate * gradient
             y_pred = self._sigmoid(X @ self.weights)
             metric_val = self._calculate_metric(y, y_pred)
@@ -57,7 +69,9 @@ class MyLogReg:
 
     def _calculate_logloss(self, y_true, y_pred, eps=1e-15):
         y_pred = np.clip(y_pred, eps, 1 - eps)
-        return -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+        log_loss = -np.mean(y_true * np.log(y_pred) + (1 - y_true) * np.log(1 - y_pred))
+        log_loss += self._calculate_regularization()
+        return log_loss
 
     def _calculate_metric(self, y_true, y_pred):
         y_pred_binary = (y_pred > 0.5).astype(int)
@@ -100,6 +114,34 @@ class MyLogReg:
 
     def get_best_score(self):
         return self.best_score
+
+    def _calculate_regularization(self):
+        if self.reg == "l1":
+            return self.l1_coef * np.sum(np.abs(self.weights))
+
+        elif self.reg == "l2":
+            return self.l2_coef * np.sum(self.weights**2)
+
+        elif self.reg == "elasticnet":
+            return self.l1_coef * np.sum(np.abs(self.weights)) + self.l2_coef * np.sum(
+                self.weights**2
+            )
+        else:
+            return 0
+
+    def _calculate_regularization_gradient(self):
+        if self.reg == "l1":
+            return self.l1_coef * np.sign(self.weights)
+
+        if self.reg == "l2":
+            return self.l2_coef * 2 * self.weights
+
+        elif self.reg == "elasticnet":
+            return (
+                self.l1_coef * np.sign(self.weights) + self.l2_coef * 2 * self.weights
+            )
+        else:
+            return 0
 
 
 if __name__ == "__main__":
