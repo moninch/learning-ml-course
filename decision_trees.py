@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.datasets import load_iris
 
 
 class MyTreeClf:
@@ -20,15 +21,18 @@ class MyTreeClf:
 
         for col in X.columns:
             unique_values = np.sort(X[col].unique())
-            for i in range(1, len(unique_values)):
-                split_value_temp = (unique_values[i - 1] + unique_values[i]) / 2
+            split_values = (unique_values[:-1] + unique_values[1:]) / 2
+            for split_value_temp in split_values:
                 left_mask = X[col] <= split_value_temp
                 right_mask = X[col] > split_value_temp
 
                 y_left = y[left_mask]
                 y_right = y[right_mask]
 
-                if len(y_left) == 0 or len(y_right) == 0:
+                if (
+                    len(y_left) < self.min_samples_split
+                    or len(y_right) < self.min_samples_split
+                ):
                     continue
 
                 ig_temp = self._information_gain(y, y_left, y_right)
@@ -48,11 +52,12 @@ class MyTreeClf:
         return H_y - (p_left * H_left + p_right * H_right)
 
     def _entropy(self, y):
-        if y.size == 0:
+        if len(y) == 0:
             return 0
-        p = np.bincount(y) / len(y)
-        p = p[p > 0]
-        return -np.sum(p * np.log2(p))
+        else:
+            counts = np.bincount(y)
+            probabilities = counts / len(y)
+            return -np.sum([p * np.log2(p) for p in probabilities if p > 0])
 
     def fit(self, X: pd.DataFrame, y: pd.Series):
         self.X = X.copy()
@@ -60,6 +65,7 @@ class MyTreeClf:
         self.tree = self._build_tree(self.X, self.y, depth=0)
 
     def _build_tree(self, X: pd.DataFrame, y: pd.Series, depth: int):
+        # Проверка на условия остановки
         if (
             depth >= self.max_depth
             or len(y) < self.min_samples_split
@@ -68,22 +74,32 @@ class MyTreeClf:
             self.leafs_cnt += 1
             return {"class": np.bincount(y).argmax()}
 
+        # Проверка на однородность классов
+        if len(y.unique()) == 1:
+            self.leafs_cnt += 1
+            return {"class": y.unique()[0]}
+
+        # Поиск лучшего сплита
         col_name, split_value, ig = self.get_best_split(X, y)
 
+        # Если не найден лучший сплит, возвращаем лист
+        if col_name is None or ig == 0:
+            self.leafs_cnt += 1
+            return {"class": np.bincount(y).argmax()}
+
+        # Разделение данных
         left_mask = X[col_name] <= split_value
         right_mask = X[col_name] > split_value
 
         y_left = y[left_mask]
         y_right = y[right_mask]
 
-        if col_name is None:
-            self.leafs_cnt += 1
-            return {"class": np.bincount(y).argmax()}
-
+        # Если одна из подвыборок пуста, возвращаем лист
         if len(y_left) == 0 or len(y_right) == 0:
             self.leafs_cnt += 1
             return {"class": np.bincount(y).argmax()}
 
+        # Рекурсивное построение левого и правого поддеревьев
         left_tree = self._build_tree(X[left_mask], y_left, depth + 1)
         right_tree = self._build_tree(X[right_mask], y_right, depth + 1)
 
@@ -98,7 +114,7 @@ class MyTreeClf:
         if "class" in node:
             print("  " * depth + f'leaf = {node["class"]}')
         else:
-            print("  " * depth + f'{node["col"]} > {node["value"]}')
+            print("  " * depth + f'{node["col_name"]} > {node["split_value"]}')
             self._print_tree(node["left"], depth + 1)
             self._print_tree(node["right"], depth + 1)
 
@@ -107,3 +123,29 @@ class MyTreeClf:
             self._print_tree(self.tree)
         else:
             print("Дерево еще не построено.")
+
+    def _predict_proba_row(self, row, node):
+        if "class" in node:
+            return node["class"]
+        if row[node["col_name"]] <= node["split_value"]:
+            return self._predict_proba_row(row, node["left"])
+        else:
+            return self._predict_proba_row(row, node["right"])
+
+    def predict_proba(self, X: pd.DataFrame):
+        return [self._predict_proba_row(row, self.tree) for _, row in X.iterrows()]
+
+    def predict(self, X: pd.DataFrame):
+        probas = self.predict_proba(X)
+        return [1 if p > 0.5 else 0 for p in probas]
+
+
+iris = load_iris()
+X = pd.DataFrame(iris.data, columns=iris.feature_names)
+y = pd.Series(iris.target)
+
+# Пример использования
+tree = MyTreeClf(max_depth=3, min_samples_split=2, max_leafs=1)
+tree.fit(X, y)
+print(f"Количество листьев: {tree.leafs_cnt}")
+tree.print_tree()
