@@ -12,32 +12,21 @@ class MyKNNClf:
     def __str__(self):
         return f"MyKNNClf class: k={self.k}"
 
-    def fit(self, X, y):
-        self.X = X.copy()
-        self.y = y.copy()
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.X = X.values
+        self.y = y.values
         self.train_size = X.shape
 
+    def _euclidean_distance(self, x1, x2):
+        return np.sqrt(np.sum((x1 - x2) ** 2))
+
     def predict(self, X: pd.DataFrame):
-        predictions = []
-        for i in range(X.shape[0]):
-            distances = cdist(X.iloc[i : i + 1], self.X, metric="euclidean")
-            nearest_indices = np.argsort(distances)[0][: self.k]
-            nearest_labels = self.y.iloc[nearest_indices]
-            most_common = Counter(nearest_labels).most_common(2)
-            if len(most_common) == 0:
-                predictions.append(1)
-            elif len(most_common) == 1 or most_common[0][1] > most_common[1][1]:
-                predictions.append(most_common[0][0])
-            else:
-                predictions.append(1)
-        return np.array(predictions)
+        return np.array([1 if prob >= 0.5 else 0 for prob in self.predict_proba(X)])
 
     def predict_proba(self, X: pd.DataFrame):
-        probabilities = []
-        for i in range(X.shape[0]):
-            distances = cdist(X.iloc[i : i + 1], self.X, metric="euclidean")
-            nearest_indices = np.argsort(distances)[0][: self.k]
-            nearest_labels = self.y.iloc[nearest_indices]
-            proba_class_1 = np.mean(nearest_labels == 1)
-            probabilities.append(proba_class_1)
-        return np.array(probabilities)
+        train = np.expand_dims(self.X, axis=0)
+        test = np.expand_dims(X.to_numpy(), axis=1)
+        distances = np.sqrt(np.sum((test - train) ** 2, axis=-1))
+        indx = np.argsort(distances)[:, : self.k]
+
+        return np.mean(self.y[indx], axis=1)
