@@ -9,6 +9,7 @@ class MyTreeReg:
         self.min_samples_split = min_samples_split
         self.max_leafs = max_leafs
         self.tree = None
+        self.leafs_cnt = 0
 
     def __str__(self):
         return f"MyTreeReg class: max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, max_leafs={self.max_leafs}"
@@ -50,3 +51,40 @@ class MyTreeReg:
                     split_value = split_value_temp
 
         return col_name, split_value, gain
+
+    def fit(self, X: pd.DataFrame, y: pd.Series):
+        self.tree = self._build_tree(X, y, depth=0)
+
+    def _build_tree(self, X: pd.DataFrame, y: pd.Series, depth: int):
+        if (
+            depth == self.max_depth
+            or len(y) < self.min_samples_split
+            or self.leafs_cnt >= self.max_leafs
+        ):
+            self.leafs_cnt += 1
+            return {"mean": np.mean(y)}
+
+        col_name, split_value, gain = self.get_best_split(X, y)
+        if gain <= 0:
+            self.leafs_cnt += 1
+            return {"value": np.mean(y)}
+
+        if col_name is None or gain == 0:
+            self.leafs_cnt += 1
+            return {"mean": np.mean(y)}
+
+        left_mask = X[col_name] <= split_value
+        right_mask = X[col_name] > split_value
+
+        y_left = y[left_mask]
+        y_right = y[right_mask]
+
+        left_child = self._build_tree(X[left_mask], y_left, depth + 1)
+        right_child = self._build_tree(X[right_mask], y_right, depth + 1)
+
+        return {
+            "col_name": col_name,
+            "split_value": split_value,
+            "left": left_child,
+            "right": right_child,
+        }
